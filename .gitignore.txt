@@ -1,0 +1,15 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# Environments
+.venv/
+env/
+venv/
+
+# Scientific Data (Crucial for HCS)
+*.tif
+*.tiff
+*.ome.tif
+data/
+results/
