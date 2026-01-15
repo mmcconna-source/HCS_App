@@ -3,9 +3,9 @@ import traceback
 from PyQt6.QtCore import QRunnable, pyqtSlot, QObject, pyqtSignal
 
 class WorkerSignals(QObject):
-    finished = pyqtSignal()
-    error = pyqtSignal(tuple)
-    result = pyqtSignal(object)
+    """Defines the signals available from a running worker thread."""
+    finished = pyqtSignal(str)  # Must accept a string for the success message
+    error = pyqtSignal(str)
     progress = pyqtSignal(int)
 
 class AnalysisWorker(QRunnable):
@@ -15,17 +15,15 @@ class AnalysisWorker(QRunnable):
         self.args = args
         self.kwargs = kwargs
         self.signals = WorkerSignals()
+        
+        # Inject the progress_callback into the plugin arguments [cite: 17, 21]
         self.kwargs['progress_callback'] = self.signals.progress
 
-    @pyqtSlot()
     def run(self):
+        """Executes the plugin logic in a separate thread[cite: 9, 39]."""
         try:
+            # result is the string returned by the plugin's run function [cite: 50]
             result = self.fn(*self.args, **self.kwargs)
-        except:
-            traceback.print_exc()
-            exctype, value = sys.exc_info()[:2]
-            self.signals.error.emit((exctype, value, traceback.format_exc()))
-        else:
-            self.signals.result.emit(result)
-        finally:
-            self.signals.finished.emit()
+            self.signals.finished.emit(str(result))
+        except Exception as e:
+            self.signals.error.emit(str(e))
