@@ -15,6 +15,28 @@ def discover_plugins(directory="modules"):
             spec.loader.exec_module(module)
             plugins[module_name] = module
     return plugins
+def create_widget_with_search(arg_name, default_val):
+    layout = QHBoxLayout()
+    line_edit = QLineEdit(str(default_val))
+    
+    # Identify if a search button is needed based on naming convention [cite: 32]
+    if "directory" in arg_name or "path" in arg_name:
+        btn = QPushButton("Browse")
+        btn.clicked.connect(lambda: update_path(line_edit, arg_name))
+        layout.addWidget(line_edit)
+        layout.addWidget(btn)
+        return layout, line_edit
+    
+    return line_edit, line_edit
+
+def update_path(line_edit, arg_name):
+    if "directory" in arg_name:
+        path = QFileDialog.getExistingDirectory(None, "Select Directory")
+    else:
+        path, _ = QFileDialog.getOpenFileName(None, "Select File")
+    
+    if path:
+        line_edit.setText(path)
 
 def create_plugin_ui(module):
     form = QFormLayout()
