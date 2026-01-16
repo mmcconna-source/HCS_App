@@ -4,7 +4,9 @@ from PyQt6.QtWidgets import (
     QListWidget, QPushButton, QProgressBar, QLabel, QFileDialog, 
     QMessageBox, QScrollArea
 )
-from PyQt6.QtCore import QThreadPool, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QThreadPool, pyqtSlot
+
+# Correct Imports: UI/Logic separation [cite: 2]
 from plugin_manager import discover_plugins, create_plugin_ui
 from utils.worker import AnalysisWorker
 
@@ -13,7 +15,8 @@ class HCSApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("HCS Modular Application")
         self.resize(1000, 700)
-        # Threading: Handles heavy processing in separate context [cite: 9]
+        
+        # Threading: QThreadPool for heavy processing [cite: 9]
         self.threadpool = QThreadPool() 
         self.selected_plugin = None
         self.data_path = None
@@ -43,9 +46,8 @@ class HCSApp(QMainWindow):
         
         main_layout.addLayout(sidebar, 1)
 
-        # Main Panel: Dynamic UI Generation 
+        # Main Panel: Dynamic UI Generation [cite: 37]
         display_panel = QVBoxLayout()
-        
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.param_container = QWidget()
@@ -67,15 +69,15 @@ class HCSApp(QMainWindow):
         main_layout.addLayout(display_panel, 3)
 
     def load_plugins(self):
-        """Discovers modules in the /modules folder[cite: 35]."""
+        """Discovery: Scan /modules[cite: 35]."""
         self.plugins = discover_plugins()
         for name, module in self.plugins.items():
-            # Use NAME constant for UI labeling [cite: 42-43]
+            # Metadata: Define UI labeling [cite: 42-43]
             display_name = getattr(module, "NAME", name)
             self.plugin_list.addItem(display_name)
 
     def browse_data(self):
-        """Sets the data_path reserved keyword[cite: 16]."""
+        """Reserved Keyword: data_path[cite: 16]."""
         path = QFileDialog.getExistingDirectory(self, "Select Root Data Directory")
         if path:
             self.data_path = path
@@ -83,17 +85,17 @@ class HCSApp(QMainWindow):
             self.check_run_ready()
 
     def on_plugin_selected(self, item):
-        """Clears and rebuilds the parameter panel for the selected plugin[cite: 37]."""
+        """Dynamic Build: Rebuild parameter panel[cite: 37]."""
         plugin_name = next(k for k, v in self.plugins.items() if getattr(v, "NAME", k) == item.text())
         self.selected_plugin = self.plugins[plugin_name]
         
-        # Clear existing widgets [cite: 37, 47]
+        # Clean Code: Clear layout [cite: 47]
         for i in reversed(range(self.param_layout.count())): 
-            widget = self.param_layout.itemAt(i).widget()
-            if widget:
-                widget.setParent(None)
+            layout_item = self.param_layout.itemAt(i)
+            if layout_item.widget():
+                layout_item.widget().setParent(None)
 
-        # Build new UI [cite: 12, 31-32]
+        # Generate widgets based on mapping [cite: 31]
         self.form_layout, self.widgets = create_plugin_ui(self.selected_plugin)
         
         temp_widget = QWidget()
@@ -102,56 +104,47 @@ class HCSApp(QMainWindow):
         self.check_run_ready()
 
     def check_run_ready(self):
-        """Ensures both a plugin and data directory are selected."""
         if self.selected_plugin and self.data_path:
             self.btn_run.setEnabled(True)
 
     def run_analysis(self):
-        """Collects params and executes module in a background thread [cite: 38-39]."""
-        # Collection [cite: 38]
+        """Collection & Execution workflow [cite: 38-39]."""
         params = {}
         for name, widget in self.widgets.items():
-            # Dynamically read values based on widget type [cite: 31-32]
-            if hasattr(widget, 'value'): params[name] = widget.value()
-            elif hasattr(widget, 'isChecked'): params[name] = widget.isChecked()
-            elif hasattr(widget, 'text'): params[name] = widget.text()
+            if isinstance(widget, QSpinBox) or isinstance(widget, QDoubleSpinBox):
+                params[name] = widget.value()
+            elif isinstance(widget, QCheckBox):
+                params[name] = widget.isChecked()
+            else:
+                params[name] = widget.text()
 
-        # Inject reserved keyword [cite: 16]
         params['data_path'] = self.data_path
+        params['progress_callback'] = True 
         
-        # Threading: Instantiate AnalysisWorker [cite: 9, 39]
         self.btn_run.setEnabled(False)
-        worker = AnalysisWorker(self.selected_plugin.run, **params)
+        self.progress_bar.setValue(0)
         
-        # Connect signals for UI updates [cite: 40, 48]
+        # Bridge: Execute in separate context [cite: 9, 39]
+        worker = AnalysisWorker(self.selected_plugin.run, **params)
         worker.signals.progress.connect(self.progress_bar.setValue)
         worker.signals.finished.connect(self.on_finished)
         worker.signals.error.connect(self.on_error)
         
         self.threadpool.start(worker)
 
-    @pyqtSlot(str)
+    @pyqtSlot(object)
     def on_finished(self, message):
-        """
-        Triggered when the AnalysisWorker completes successfully.
-        Receives the status string from the plugin's return statement.
-        """
+        """Successful execution callback[cite: 40]."""
         self.btn_run.setEnabled(True)
         self.progress_bar.setValue(100)
-        
-        # Display the Notification Pop-up
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Analysis Complete")
-        msg.setText(message)
-        msg.setIcon(QMessageBox.Icon.Information)
-        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-        msg.exec()
+        QMessageBox.information(self, "Analysis Complete", str(message))
 
     @pyqtSlot(str)
     def on_error(self, error_msg):
-        """Error handling via Clean Signals[cite: 48, 50]."""
+        """Error resilience[cite: 50]."""
         self.btn_run.setEnabled(True)
-        QMessageBox.critical(self, "Analysis Error", error_msg)
+        self.progress_bar.setValue(0)
+        QMessageBox.critical(self, "Analysis Error", f"A plugin error occurred:\n\n{error_msg}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
